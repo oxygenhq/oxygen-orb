@@ -1,0 +1,202 @@
+version: 2.1
+
+description: >
+  Use the Oxygen open source framework to run automated tests.
+  See this orb's source: https://github.com/oxygenhq/oxygen-orb
+
+executors:
+  default:
+    docker:
+      - image: circleci/openjdk:8u181-jdk-stretch-node-browsers
+
+commands:
+  install-oxygen-cli:
+    description: >
+      Install Oxygen CLI and its dependencies, Selenium Standalone Server, and 
+      optionally the Mono .NET framework.
+
+    parameters:
+      executor:
+        description: executor to use for this job
+        type: executor
+        default: default
+      
+      checkout:
+        description: >
+          Boolean for whether or not to checkout as a first step. Default is true.
+        type: boolean
+        default: true
+
+      selenium-minor-version:
+        description: the minor version of Selenium Standalone Server to use
+        type: string
+        default: "3.5"
+
+      selenium-patch-version:
+        description: the patch version of Selenium Standalone Server to use
+        type: string
+        default: "3.5.3"
+
+      install-dotnet-framework:
+        description: indicate whether to install the Mono .NET framework
+        type: boolean
+        default: false
+
+    steps:
+      - when:
+          condition: << parameters.checkout >>
+          steps:
+            - checkout
+
+      - run:
+          name: Install Oxygen CLI
+          command: |
+            sudo apt-get install unixodbc unixodbc-dev
+            npm set prefix=/home/circleci/npm
+            echo 'export PATH=$HOME/npm/bin:$PATH' >> /home/circleci/.bashrc
+            source /home/circleci/.bashrc
+            npm install -g oxygen-cli
+
+
+  install-mono:
+    description: >
+      Optionally install the Mono .NET framework.
+
+    parameters:
+      executor:
+        description: executor to use for this job
+        type: executor
+        default: default
+      
+      install-dotnet-framework:
+        description: indicate whether to install the Mono .NET framework
+        type: boolean
+        default: false
+
+    steps:
+      - when:
+          condition: << parameters.install-dotnet-framework >>
+          steps:
+            - run:
+                name: Install Mono .Net framework for Debian 9
+                command: |
+                  sudo apt install apt-transport-https dirmngr gnupg ca-certificates
+                  sudo apt-key adv --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys 3FA7E0328081BFF6A14DA29AA6A19B38D3D831EF
+                  echo "deb https://download.mono-project.com/repo/debian stable-stretch main" | sudo tee /etc/apt/sources.list.d/mono-official-stable.list
+                  sudo apt update
+                  sudo apt install mono-devel
+
+  install-selenium:
+    description: >
+      Install Selenium Standalone Server
+
+    parameters:
+      executor:
+        description: executor to use for this job
+        type: executor
+        default: default
+
+      selenium-minor-version:
+        description: the minor version of Selenium Standalone Server to use
+        type: string
+        default: "3.5"
+
+      selenium-patch-version:
+        description: the patch version of Selenium Standalone Server to use
+        type: string
+        default: "3.5.3"
+
+    steps:
+      - run:
+          name: Install Selenium Standalone Server
+          command: |
+            curl -O http://selenium-release.storage.googleapis.com/<< parameters.selenium-minor-version >>/selenium-server-standalone-<< parameters.selenium-patch-version >>.jar
+
+  start-server:
+    description: >
+      Start Selenium Standalone Server
+
+    parameters:
+      executor:
+        description: executor to use for this job
+        type: executor
+        default: default
+      
+      selenium-minor-version:
+        description: the minor version of Selenium Standalone Server to use
+        type: string
+        default: "3.5"
+
+      selenium-patch-version:
+        description: the patch version of Selenium Standalone Server to use
+        type: string
+        default: "3.5.3"
+
+    steps:
+      - run:
+          name: Create test-reports directory
+          command: mkdir test-reports
+
+      - run:
+          name: Start Selenium Standalone Server
+          command: |
+            java -jar selenium-server-standalone-<< parameters.selenium-patch-version >>.jar -port 4444 -timeout 320 -browserTimeout 320 -log test-reports/selenium.log
+          background: true
+
+jobs:
+  install-and-start-server:
+    description: Install Oxygen, Selenium, and Mono (optional), and start server 
+    executor: default
+    parameters:
+      executor:
+        description: executor to use for this job
+        type: executor
+        default: default
+      
+      checkout:
+        description: >
+          Boolean for whether or not to checkout as a first step. Default is true.
+        type: boolean
+        default: true
+
+      selenium-minor-version:
+        description: the minor version of Selenium Standalone Server to use
+        type: string
+        default: "3.5"
+
+      selenium-patch-version:
+        description: the patch version of Selenium Standalone Server to use
+        type: string
+        default: "3.5.3"
+
+      install-dotnet-framework:
+        description: indicate whether to install the Mono .NET framework
+        type: boolean
+        default: false
+    steps: 
+      - install-oxygen-cli
+      - install-selenium:
+          selenium-minor-version: << parameters.selenium-minor-version >>
+          selenium-patch-version: << parameters.selenium-patch-version >>
+      - install-mono:
+          install-dotnet-framework: << parameters.install-dotnet-framework >>
+      - start-server
+      - run: sleep 30
+
+examples:
+  install_and_start_server:
+    description: > 
+      Install the Oxygen CLI, its dependencies, and Selenium Standalone Server, 
+      and start the server.
+    usage:
+      version: 2.1
+      orbs: 
+        cloudbeat: sandbox/oxygen-orb@1.0.0
+      workflows:
+        install_and_start_server:
+          jobs:
+            - cloudbeat/install-and-start-server:
+                selenium-minor-version: "3.5"
+                selenium-patch-version: "3.5.3"
+                install-dotnet-framework: false
+      
