@@ -12,20 +12,13 @@ executors:
 commands:
   install-oxygen-cli:
     description: >
-      Install Oxygen CLI and its dependencies, Selenium Standalone Server, and 
-      optionally the Mono .NET framework.
+      Install Oxygen CLI.
 
     parameters:
       executor:
         description: executor to use for this job
         type: executor
         default: default
-      
-      checkout:
-        description: >
-          Boolean for whether or not to checkout as a first step. Default is true.
-        type: boolean
-        default: true
 
       selenium-minor-version:
         description: the minor version of Selenium Standalone Server to use
@@ -43,11 +36,6 @@ commands:
         default: false
 
     steps:
-      - when:
-          condition: << parameters.checkout >>
-          steps:
-            - checkout
-
       - run:
           name: Install Oxygen CLI
           command: |
@@ -56,7 +44,6 @@ commands:
             echo 'export PATH=$HOME/npm/bin:$PATH' >> /home/circleci/.bashrc
             source /home/circleci/.bashrc
             npm install -g oxygen-cli
-
 
   install-mono:
     description: >
@@ -112,7 +99,7 @@ commands:
           command: |
             curl -O http://selenium-release.storage.googleapis.com/<< parameters.selenium-minor-version >>/selenium-server-standalone-<< parameters.selenium-patch-version >>.jar
 
-  start-server:
+  start-selenium:
     description: >
       Start Selenium Standalone Server
 
@@ -134,30 +121,66 @@ commands:
 
     steps:
       - run:
-          name: Create test-reports directory
-          command: mkdir test-reports
+          name: Create selenium-artifacts directory
+          command: mkdir selenium-artifacts
 
       - run:
           name: Start Selenium Standalone Server
           command: |
-            java -jar selenium-server-standalone-<< parameters.selenium-patch-version >>.jar -port 4444 -timeout 320 -browserTimeout 320 -log test-reports/selenium.log
+            java -jar selenium-server-standalone-<< parameters.selenium-patch-version >>.jar -port 4444 -timeout 320 -browserTimeout 320 -log selenium-artifacts/selenium.log
           background: true
 
+  run-tests:
+    description: >
+      Run a test case or test suite with Oxygen CLI.
+
+    parameters:
+      executor:
+        description: executor to use for this job
+        type: executor
+        default: default
+
+      file:
+        description: >
+          Test case or test suite file to execute.
+        type: string
+        default: ''
+
+      browser:
+        description: >
+          Test case or test suite file to execute.
+        type: string
+        default: ''
+
+      oxygen-test-reports:
+        type: string
+        default: ''
+
+    steps:
+
+      - run:
+          name: Create oxygen-test-reports directory
+          command: mkdir oxygen-test-reports
+
+      - run:
+          name: Run test case or test suite
+          command: |
+            oxygen \
+                    <<# parameters.browser>> --browser <<parameters.browser>> <</ parameters.browser>> \
+                    --rf=junit <<parameters.file>>
+
+      - store_test_results:
+          path: <<parameters.oxygen-test-reports>>
+
 jobs:
-  install-and-start-server:
-    description: Install Oxygen, Selenium, and Mono (optional), and start server 
+  install-start-run-tests:
+    description: Install Oxygen, Selenium, and Mono (optional), then start server and run a test case or test suite with Oxygen CLI
     executor: default
     parameters:
       executor:
         description: executor to use for this job
         type: executor
         default: default
-      
-      checkout:
-        description: >
-          Boolean for whether or not to checkout as a first step. Default is true.
-        type: boolean
-        default: true
 
       selenium-minor-version:
         description: the minor version of Selenium Standalone Server to use
@@ -173,30 +196,60 @@ jobs:
         description: indicate whether to install the Mono .NET framework
         type: boolean
         default: false
-    steps: 
+
+      checkout:
+        description: >
+          Boolean for whether or not to checkout as a first step. Default is true.
+        type: boolean
+        default: true
+
+      file:
+        description: >
+          Test case or test suite file to execute.
+        type: string
+        default: ''
+
+      browser:
+        description: >
+          Test case or test suite file to execute.
+        type: string
+        default: ''
+
+      oxygen-test-reports:
+        type: string
+        default: ''
+    steps:
+      - when:
+          condition: << parameters.checkout >>
+          steps:
+            - checkout
       - install-oxygen-cli
       - install-selenium:
           selenium-minor-version: << parameters.selenium-minor-version >>
           selenium-patch-version: << parameters.selenium-patch-version >>
       - install-mono:
           install-dotnet-framework: << parameters.install-dotnet-framework >>
-      - start-server
-      - run: sleep 30
+      - start-selenium:
+          selenium-minor-version: << parameters.selenium-minor-version >>
+          selenium-patch-version: << parameters.selenium-patch-version >>
+      - run-tests:
+          file: << parameters.file >>
+          browser: << parameters.browser >>
+          oxygen-test-reports: << parameters.oxygen-test-reports >>
 
 examples:
-  install_and_start_server:
+  build:
     description: > 
-      Install the Oxygen CLI, its dependencies, and Selenium Standalone Server, 
-      and start the server.
+      Install the Oxygen CLI, its dependencies, Selenium Standalone Server, start the Selenium Standalone Server and run a test suite with Oxygen CLI.
     usage:
       version: 2.1
       orbs: 
-        cloudbeat: sandbox/oxygen-orb@1.0.0
+        oxygen: cloudbeat/oxygen@1.0.0
       workflows:
-        install_and_start_server:
+        oxygen_install-start-run-tests:
           jobs:
-            - cloudbeat/install-and-start-server:
+            - oxygen/install-start-run-tests:
                 selenium-minor-version: "3.5"
                 selenium-patch-version: "3.5.3"
                 install-dotnet-framework: false
-      
+                file: '~/suite.json'
