@@ -21,42 +21,12 @@ commands:
         default: default
 
     steps:
+      - run: echo 'export PATH=$HOME/npm/bin:$PATH' >> $BASH_ENV
       - run:
           name: Install Oxygen CLI
           command: |
-            sudo apt-get install unixodbc unixodbc-dev
             npm set prefix=/home/circleci/npm
-            echo 'export PATH=$HOME/npm/bin:$PATH' >> /home/circleci/.bashrc
-            source /home/circleci/.bashrc
             npm install -g oxygen-cli
-
-  install-mono:
-    description: >
-      Optionally install the Mono .NET framework.
-
-    parameters:
-      executor:
-        description: executor to use for this job
-        type: executor
-        default: default
-      
-      install-dotnet-framework:
-        description: indicate whether to install the Mono .NET framework
-        type: boolean
-        default: false
-
-    steps:
-      - when:
-          condition: << parameters.install-dotnet-framework >>
-          steps:
-            - run:
-                name: Install Mono .Net framework for Debian 9
-                command: |
-                  sudo apt install apt-transport-https dirmngr gnupg ca-certificates
-                  sudo apt-key adv --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys 3FA7E0328081BFF6A14DA29AA6A19B38D3D831EF
-                  echo "deb https://download.mono-project.com/repo/debian stable-stretch main" | sudo tee /etc/apt/sources.list.d/mono-official-stable.list
-                  sudo apt update
-                  sudo apt install mono-devel
 
   install-selenium:
     description: >
@@ -131,6 +101,12 @@ commands:
         type: string
         default: ''
 
+      results:
+        description: >
+          Folder in which test results will be stored. Default is oxygen-test-results.
+        type: string
+        default: 'oxygen-test-results'
+
       iter:
         description: >
           Number of times (iterations) to run the test. Default is 1.
@@ -159,30 +135,26 @@ commands:
 
       selenium-url:
         description: >
-          Selenium hub URL. Default is http://localhost:4444/wd/hub
+          Selenium hub URL (optional). If not specified an attempt will be made to use  http://localhost:4444/wd/hub.
         type: string
         default: ''
 
     steps:
 
       - run:
-          name: Create oxygen-test-reports directory
-          command: mkdir oxygen-test-reports
+          name: Create test results directory
+          command: mkdir <<parameters.results>>
 
       - run:
           name: Run test case or test suite
           command: |
-            export PATH=$HOME/npm/bin:$PATH
-            oxygen \
-                    <<# parameters.iter>> --iter=<<parameters.iter>> <</ parameters.iter>> \
+            oxygen --iter=<<parameters.iter>> --pm=<<parameters.pm>> --browser=<<parameters.browser>> \
                     <<# parameters.param>> --param=<<parameters.param>> <</ parameters.param>> \
-                    <<# parameters.pm>> --pm=<<parameters.pm>> <</ parameters.pm>> \
-                    <<# parameters.browser>> --browser=<<parameters.browser>> <</ parameters.browser>> \
                     <<# parameters.selenium-url>> --server=<<parameters.selenium-url>> <</ parameters.selenium-url>> \
-                    --rf=junit --ro=oxygen-test-reports <<parameters.file>>
+                    --rf=junit --ro=<<parameters.results>> <<parameters.file>>
 
       - store_test_results:
-          path: oxygen-test-reports
+          path: <<parameters.results>>
 
 jobs:
   install-start-run-tests:
@@ -204,11 +176,6 @@ jobs:
         type: string
         default: "3.5.3"
 
-      install-dotnet-framework:
-        description: indicate whether to install the Mono .NET framework
-        type: boolean
-        default: false
-
       checkout:
         description: >
           Boolean for whether or not to checkout as a first step. Default is true.
@@ -220,6 +187,12 @@ jobs:
           Test case or test suite file to execute.
         type: string
         default: ''
+
+      results:
+        description: >
+          Folder in which test results will be stored. Default is oxygen-test-results.
+        type: string
+        default: 'oxygen-test-results'
 
       iter:
         description: >
@@ -255,13 +228,12 @@ jobs:
       - install-selenium:
           selenium-minor-version: << parameters.selenium-minor-version >>
           selenium-patch-version: << parameters.selenium-patch-version >>
-      - install-mono:
-          install-dotnet-framework: << parameters.install-dotnet-framework >>
       - start-selenium:
           selenium-minor-version: << parameters.selenium-minor-version >>
           selenium-patch-version: << parameters.selenium-patch-version >>
       - run-tests:
           file: << parameters.file >>
+          results: << parameters.results >>
           iter: << parameters.iter >>
           param: << parameters.param >>
           pm: << parameters.pm >>
@@ -274,12 +246,11 @@ examples:
     usage:
       version: 2.1
       orbs: 
-        oxygen: cloudbeat/oxygen@1.0.0
+        oxygen: cloudbeat/oxygen@0.0.2
       workflows:
         oxygen_install-start-run-tests:
           jobs:
             - oxygen/install-start-run-tests:
                 selenium-minor-version: "3.5"
                 selenium-patch-version: "3.5.3"
-                install-dotnet-framework: false
-                file: '~/suite.json'
+                file: 'tests/suite.json'
