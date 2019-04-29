@@ -20,21 +20,6 @@ commands:
         type: executor
         default: default
 
-      selenium-minor-version:
-        description: the minor version of Selenium Standalone Server to use
-        type: string
-        default: "3.5"
-
-      selenium-patch-version:
-        description: the patch version of Selenium Standalone Server to use
-        type: string
-        default: "3.5.3"
-
-      install-dotnet-framework:
-        description: indicate whether to install the Mono .NET framework
-        type: boolean
-        default: false
-
     steps:
       - run:
           name: Install Oxygen CLI
@@ -146,13 +131,35 @@ commands:
         type: string
         default: ''
 
-      browser:
+      iter:
         description: >
-          Test case or test suite file to execute.
+          Number of times (iterations) to run the test. Default is 1.
+        type: integer
+        default: 1
+
+      param:
+        description: >
+          Parameters file (optional). If not specified an attempt will be made to load parameters from a file named same as the test script, located in the same directory, and having extension - xlsx, xls, csv, or txt.
         type: string
         default: ''
 
-      oxygen-test-reports:
+      pm:
+        description: >
+          Order in which to read the parameters - sequential, random, all. Default is seq. In seq and random modes test will run exact number of times specified with the iter parameter. In all mode, all available parameters will be read sequentially. This option is mutually exclusive with iter parameter.
+        type: enum
+        enum: ['seq', 'random', 'all']
+        default: 'seq'
+
+      browser:
+        description: >
+          Browser name (chrome or ie). Default is chrome.
+        type: enum
+        enum: ['chrome', 'ie']
+        default: 'chrome'
+
+      selenium-url:
+        description: >
+          Selenium hub URL. Default is http://localhost:4444/wd/hub
         type: string
         default: ''
 
@@ -165,12 +172,17 @@ commands:
       - run:
           name: Run test case or test suite
           command: |
+            export PATH=$HOME/npm/bin:$PATH
             oxygen \
-                    <<# parameters.browser>> --browser <<parameters.browser>> <</ parameters.browser>> \
-                    --rf=junit <<parameters.file>>
+                    <<# parameters.iter>> --iter=<<parameters.iter>> <</ parameters.iter>> \
+                    <<# parameters.param>> --param=<<parameters.param>> <</ parameters.param>> \
+                    <<# parameters.pm>> --pm=<<parameters.pm>> <</ parameters.pm>> \
+                    <<# parameters.browser>> --browser=<<parameters.browser>> <</ parameters.browser>> \
+                    <<# parameters.selenium-url>> --server=<<parameters.selenium-url>> <</ parameters.selenium-url>> \
+                    --rf=junit --ro=oxygen-test-reports <<parameters.file>>
 
       - store_test_results:
-          path: <<parameters.oxygen-test-reports>>
+          path: oxygen-test-reports
 
 jobs:
   install-start-run-tests:
@@ -209,15 +221,31 @@ jobs:
         type: string
         default: ''
 
-      browser:
+      iter:
         description: >
-          Test case or test suite file to execute.
+          Number of times (iterations) to run the test. Default is 1.
+        type: integer
+        default: 1
+
+      param:
+        description: >
+          Parameters file (optional). If not specified an attempt will be made to load parameters from a file named same as the test script, located in the same directory, and having extension - xlsx, xls, csv, or txt.
         type: string
         default: ''
 
-      oxygen-test-reports:
-        type: string
-        default: ''
+      pm:
+        description: >
+          Order in which to read the parameters - sequential, random, all. Default is seq. In seq and random modes test will run exact number of times specified with the iter parameter. In all mode, all available parameters will be read sequentially. This option is mutually exclusive with iter parameter.
+        type: enum
+        enum: ['seq', 'random', 'all']
+        default: 'seq'
+
+      browser:
+        description: >
+          Browser name (chrome or ie). Default is chrome.
+        type: enum
+        enum: ['chrome', 'ie']
+        default: 'chrome'
     steps:
       - when:
           condition: << parameters.checkout >>
@@ -234,8 +262,10 @@ jobs:
           selenium-patch-version: << parameters.selenium-patch-version >>
       - run-tests:
           file: << parameters.file >>
+          iter: << parameters.iter >>
+          param: << parameters.param >>
+          pm: << parameters.pm >>
           browser: << parameters.browser >>
-          oxygen-test-reports: << parameters.oxygen-test-reports >>
 
 examples:
   build:
