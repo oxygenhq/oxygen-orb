@@ -246,7 +246,7 @@ examples:
     usage:
       version: 2.1
       orbs: 
-        oxygen: cloudbeat/oxygen@0.0.2
+        oxygen: cloudbeat/oxygen@1.0.0
       workflows:
         oxygen_install-start-run-tests:
           jobs:
